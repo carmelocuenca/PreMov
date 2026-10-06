@@ -61,20 +61,35 @@ disparo externo (Gardasoft CC320).
    físicas (si solo ves "no transport layers were found", revisa el paso 1;
    si las ves pero fallan al abrir por permisos, revisa el paso 2).
 
-4. **Crear el entorno conda:**
+4. **Instalar conda, si el usuario que vas a usar no lo tiene ya.** Cada
+   usuario del sistema necesita su propia instalación (conda vive en el
+   `$HOME` de quien lo instala, no es compartido entre usuarios). Con
+   Miniforge, de forma no interactiva:
+   ```
+   cd ~
+   curl -L -O https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+   bash Miniforge3-Linux-x86_64.sh -b -p "$HOME/miniforge3"
+   source "$HOME/miniforge3/etc/profile.d/conda.sh"
+   ```
+   La última línea (`source .../conda.sh`) hay que repetirla en cada
+   sesión nueva de terminal hasta que corras `conda init` o abras una
+   sesión de login completa (el instalador ya añade el bloque necesario a
+   `~/.bashrc` para sesiones interactivas futuras).
+
+5. **Crear el entorno conda:**
    ```
    conda env create -f environment.yml
    conda activate PreMov
    ```
 
-5. **Instalar vmbpy** (las bindings de Python de VimbaX). Vienen dentro del
+6. **Instalar vmbpy** (las bindings de Python de VimbaX). Vienen dentro del
    propio SDK, no en PyPI — instala el wheel correspondiente a la versión
    instalada en el paso 1, con el entorno `PreMov` activo:
    ```
    pip install /opt/VimbaX_<versión>/api/python/vmbpy-*.whl
    ```
 
-6. **(Solo si usas el CC320)** copia `.env.example` a `.env` y ajusta la IP
+7. **(Solo si usas el CC320)** copia `.env.example` a `.env` y ajusta la IP
    a la de tu controlador:
    ```
    cp .env.example .env
@@ -82,7 +97,7 @@ disparo externo (Gardasoft CC320).
    export $(grep -v '^#' .env | xargs)
    ```
 
-7. **Probar.** Con el entorno activado y `GENICAM_GENTL64_PATH` presente en
+8. **Probar.** Con el entorno activado y `GENICAM_GENTL64_PATH` presente en
    la sesión (`echo $GENICAM_GENTL64_PATH`):
    ```
    python scripts/capture_frames.py
