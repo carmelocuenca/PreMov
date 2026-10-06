@@ -1,0 +1,168 @@
+# PreMov
+
+Utilidades en Python para capturar vídeo simultáneo de 4 cámaras industriales
+Allied Vision Alvium 1800 U-240c (USB3 Vision), conectadas a través de una
+placa PCIe con hub USB3 de 4 puertos. Incluye captura en software a máxima
+velocidad y captura sincronizada por hardware mediante un controlador de
+disparo externo (Gardasoft CC320).
+
+## Hardware necesario
+
+- 4 cámaras Allied Vision Alvium 1800 U-240c (USB3 Vision), cada una
+  conectada a un puerto USB3 independiente del hub.
+- Una placa PCIe con hub USB3 de 4 puertos (probado con IOI
+  U3X4-PCIE4XE304, basada en un switch Pericom + 4 controladores Renesas
+  uPD720202, uno por puerto — cada cámara tiene su propio canal USB3
+  completo, no hay reparto de ancho de banda entre ellas).
+- (Opcional, solo para captura sincronizada por hardware) un controlador
+  Gardasoft CC320, con su salida de disparo cableada a la línea `Line0` de
+  cada cámara, y conectado a la misma red local que el equipo por Ethernet.
+
+## Software necesario
+
+- Ubuntu 26.04 LTS (o similar).
+- [VimbaX SDK](https://www.alliedvision.com/en/products/software/vimba-x-sdk/)
+  de Allied Vision — **no se distribuye en este repositorio** ni por pip:
+  hay que descargarlo del sitio de Allied Vision (requiere cuenta gratuita)
+  e instalarlo en `/opt`.
+- Conda (miniforge/miniconda/anaconda) para el entorno de Python.
+
+## Instalación en una máquina nueva
+
+1. **Instalar VimbaX.** Descarga el instalador de Allied Vision para Linux
+   x86_64 y ejecútalo como root. Se instala en `/opt/VimbaX_<versión>/` e
+   incluye un script que configura la variable de entorno
+   `GENICAM_GENTL64_PATH` de forma permanente (crea
+   `/etc/profile.d/VimbaX_GenTL_Path_64bit.sh`). Reinicia la sesión tras
+   instalarlo.
+
+2. **Comprobar que las cámaras se detectan.** Con las 4 cámaras conectadas
+   al hub USB, ejecuta:
+   ```
+   /opt/VimbaX_<versión>/bin/VmbCPP/Examples/ListCameras/VmbCPP_ListCamerasExample
+   ```
+   o abre `VimbaXViewer` (misma carpeta `bin/`). Debes ver las 4 cámaras
+   físicas (si solo ves "no transport layers were found", revisa el paso 1).
+
+3. **Crear el entorno conda:**
+   ```
+   conda env create -f environment.yml
+   conda activate PreMov
+   ```
+
+4. **Instalar vmbpy** (las bindings de Python de VimbaX). Vienen dentro del
+   propio SDK, no en PyPI — instala el wheel correspondiente a la versión
+   instalada en el paso 1, con el entorno `PreMov` activo:
+   ```
+   pip install /opt/VimbaX_<versión>/api/python/vmbpy-*.whl
+   ```
+
+5. **(Solo si usas el CC320)** copia `.env.example` a `.env` y ajusta la IP
+   a la de tu controlador:
+   ```
+   cp .env.example .env
+   # edita .env con la IP real
+   export $(grep -v '^#' .env | xargs)
+   ```
+
+6. **Probar.** Con el entorno activado y `GENICAM_GENTL64_PATH` presente en
+   la sesión (`echo $GENICAM_GENTL64_PATH`):
+   ```
+   python scripts/capture_frames.py
+   ```
+   Debería generar un `.png` por cada cámara física en `captures/`.
+
+## Cómo funciona
+
+### Captura de un fotograma (`scripts/capture_frames.py`)
+
+Prueba rápida de conectividad: abre cada cámara física, pide un único
+fotograma y lo guarda como PNG. Útil para comprobar que una cámara
+concreta responde antes de lanzar pruebas más largas.
+
+```
+python scripts/capture_frames.py              # solo cámaras físicas
+python scripts/capture_frames.py --all         # incluye las simuladas de VimbaX
+python scripts/capture_frames.py -o /ruta/salida
+```
+
+### Captura de velocidad en software (`scripts/speed_test_capture.py`)
+
+Arranca el streaming de las 4 cámaras a la vez (con un pequeño retardo
+escalonado entre cada una, necesario para que el hub USB3 no rechace la
+negociación de conexión si se abren exactamente en el mismo instante) y
+graba cada una a su `.mp4` en `captures/speedtest/`. Mide el throughput real
+alcanzado (fps y MB/s) por cámara y en total.
+
+Ejemplos:
+```
+# 15s a máxima velocidad, exposición fija
+python scripts/speed_test_capture.py -d 15 -e 4000
+
+# auto-exposición (necesario si las cámaras no reciben la misma luz)
+python scripts/speed_test_capture.py -d 15 --auto-exposure
+
+# fps objetivo concreto, garantizando que se cumple aunque haya poca luz
+python scripts/speed_test_capture.py --target-fps 60 --auto-exposure --guarantee-fps
+
+# a mitad de resolución (más fps)
+python scripts/speed_test_capture.py -b 2
+```
+
+Incluye un guardia de seguridad de RAM: los fotogramas se acumulan sin
+comprimir en memoria mientras dura la captura (pueden ser varios GB/s con
+las 4 cámaras), así que si el uso llega al 60% de la RAM disponible
+(configurable con `--ram-fraction`) la captura se corta antes de forzar swap.
+
+### Captura sincronizada por hardware (CC320)
+
+Con el controlador Gardasoft CC320 generando los pulsos de disparo hacia
+`Line0` de cada cámara (la configuración del propio CC320 — periodo,
+anchura de pulso — se hace desde su interfaz web/teclado, no desde estos
+scripts):
+
+- `scripts/hw_trigger_test.py` — prueba con **una sola cámara**: abre la
+  puerta del CC320 (arrancan los pulsos), captura N segundos y guarda cada
+  fotograma como PNG con su instante de llegada. Pide la IP del CC320 por
+  `--cc320-ip` o por la variable de entorno `PREMOV_CC320_IP`.
+  ```
+  python scripts/hw_trigger_test.py -c DEV_1AB22C0C4403 -d 30
+  ```
+
+- `scripts/hw_trigger_4cam.py` — las **4 cámaras a la vez**, en modo
+  pasivo: no manda ningún comando al CC320 (asume que ya está disparando),
+  solo escucha y comprueba que las 4 reciben el mismo pulso sincronizadas
+  entre sí (reporta la desalineación en ms entre el primer fotograma
+  retenido de cada cámara).
+  ```
+  python scripts/hw_trigger_4cam.py -d 30
+  ```
+
+- `scripts/hw_trigger_125fps.py` — variante para disparo a alta frecuencia
+  (pensada para ~125 fps), con exposición fija corta y el mismo guardia de
+  RAM que `speed_test_capture.py`. Sí abre/cierra la puerta del CC320
+  (`--cc320-ip` / `PREMOV_CC320_IP`), con el mínimo de comandos posible: el
+  CC320 puede quedarse bloqueado si recibe demasiados comandos de
+  reconfiguración seguidos, así que la configuración de periodo/pulso debe
+  quedar ya hecha de antemano desde su interfaz.
+  ```
+  python scripts/hw_trigger_125fps.py -d 5
+  ```
+
+### Diagnóstico del bus USB (`scripts/probe_dropout_timing.py`,
+`scripts/probe_staggered_start.py`)
+
+Scripts de diagnóstico que no graban vídeo, usados para caracterizar por
+qué fallaba la conexión simultánea de las 4 cámaras (ver el código: ambos
+tienen una docstring explicando qué comprueba cada uno). Útiles si se
+cambia de hub USB o de cámaras y vuelven a aparecer caídas de conexión.
+```
+python scripts/probe_dropout_timing.py
+python scripts/probe_staggered_start.py -s 300
+```
+
+## Salida
+
+Todos los scripts escriben en `captures/<subcarpeta>/`, que no se versiona
+en git (son ficheros binarios pesados, no código — ver `.gitignore`). Cada
+ejecución crea la carpeta de salida si no existe.

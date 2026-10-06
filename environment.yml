@@ -1,0 +1,13 @@
+name: PreMov
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - numpy==2.4.6
+      - opencv-python==5.0.0.93
+      # vmbpy NO se instala desde aquí: viene dentro del SDK VimbaX
+      # (ver README.md, sección "Instalación"). Tras instalar VimbaX, añade
+      # con este mismo entorno activo:
+      #   pip install /opt/VimbaX_<version>/api/python/vmbpy-*.whl

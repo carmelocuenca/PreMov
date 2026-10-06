@@ -1,0 +1,23 @@
+# Configuración local (IP del CC320 u otros parámetros específicos de esta instalación)
+.env
+
+# Capturas: vídeos/imágenes generadas al ejecutar los scripts, no son código
+captures/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Entornos virtuales, en caso de no usar conda
+venv/
+.venv/
+
+# Editores / IDE / herramientas locales
+.vscode/
+.idea/
+.claude/
+
+# Sistema
+.DS_Store
