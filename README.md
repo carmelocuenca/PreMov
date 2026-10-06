@@ -36,28 +36,45 @@ disparo externo (Gardasoft CC320).
    `/etc/profile.d/VimbaX_GenTL_Path_64bit.sh`). Reinicia la sesión tras
    instalarlo.
 
-2. **Comprobar que las cámaras se detectan.** Con las 4 cámaras conectadas
+2. **Añadir el usuario al grupo `video`.** La regla udev de VimbaX
+   (`/etc/udev/rules.d/99-AVTUSBTL.rules`) intenta dar acceso a estas
+   cámaras a cualquier usuario (`MODE="0666"`), pero si también hay
+   instalado el SDK CVB de Stemmer Imaging (paquete `cvb*` en `/opt`),
+   su regla `59-cvb_u3v.rules` reconoce antes estos mismos dispositivos
+   por su clase USB3 Vision genérica y les asigna `GROUP="video"` con
+   permisos más restrictivos — esa es la que gana en la práctica. Sin
+   estar en ese grupo, `vmbpy`/VimbaX no verá ninguna cámara aunque
+   estén bien conectadas. Comprueba los nodos reales con
+   `ls -l /dev/bus/usb/*/*` si quieres verificarlo.
+   ```
+   sudo usermod -aG video $USER
+   ```
+   Cierra la sesión y vuelve a entrar (la pertenencia a un grupo nuevo
+   no se aplica a una sesión ya abierta).
+
+3. **Comprobar que las cámaras se detectan.** Con las 4 cámaras conectadas
    al hub USB, ejecuta:
    ```
    /opt/VimbaX_<versión>/bin/VmbCPP/Examples/ListCameras/VmbCPP_ListCamerasExample
    ```
    o abre `VimbaXViewer` (misma carpeta `bin/`). Debes ver las 4 cámaras
-   físicas (si solo ves "no transport layers were found", revisa el paso 1).
+   físicas (si solo ves "no transport layers were found", revisa el paso 1;
+   si las ves pero fallan al abrir por permisos, revisa el paso 2).
 
-3. **Crear el entorno conda:**
+4. **Crear el entorno conda:**
    ```
    conda env create -f environment.yml
    conda activate PreMov
    ```
 
-4. **Instalar vmbpy** (las bindings de Python de VimbaX). Vienen dentro del
+5. **Instalar vmbpy** (las bindings de Python de VimbaX). Vienen dentro del
    propio SDK, no en PyPI — instala el wheel correspondiente a la versión
    instalada en el paso 1, con el entorno `PreMov` activo:
    ```
    pip install /opt/VimbaX_<versión>/api/python/vmbpy-*.whl
    ```
 
-5. **(Solo si usas el CC320)** copia `.env.example` a `.env` y ajusta la IP
+6. **(Solo si usas el CC320)** copia `.env.example` a `.env` y ajusta la IP
    a la de tu controlador:
    ```
    cp .env.example .env
@@ -65,7 +82,7 @@ disparo externo (Gardasoft CC320).
    export $(grep -v '^#' .env | xargs)
    ```
 
-6. **Probar.** Con el entorno activado y `GENICAM_GENTL64_PATH` presente en
+7. **Probar.** Con el entorno activado y `GENICAM_GENTL64_PATH` presente en
    la sesión (`echo $GENICAM_GENTL64_PATH`):
    ```
    python scripts/capture_frames.py
