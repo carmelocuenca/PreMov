@@ -90,6 +90,15 @@ def configure_camera(cam: Camera, exposure_us: Optional[float], binning: int = 1
     no reciben la misma luz, si no algunas salen negras). Un valor numérico
     fija la exposición manualmente (necesario para ir a fps máximo, a costa
     de que la imagen pueda salir sub/sobre-expuesta según la escena)."""
+    # Si una sesión anterior dejó la cámara en modo trigger externo
+    # (TriggerMode=On, usado por los scripts hw_trigger_*), AcquisitionFrameRate
+    # pasa a ser de solo lectura y el resto de esta función falla. Se fuerza
+    # siempre a modo libre (software) antes de tocar nada más.
+    try:
+        cam.TriggerMode.set("Off")
+    except Exception:
+        pass
+
     # Se fija siempre explícitamente (incluso a 1): la cámara conserva el
     # binning de la sesión anterior si no se sobreescribe.
     try:

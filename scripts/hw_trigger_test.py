@@ -94,6 +94,13 @@ def main() -> int:
             elapsed = time.perf_counter() - t_start
 
             cam.stop_streaming()
+            try:
+                # Deja la cámara en modo libre: si no, AcquisitionFrameRate
+                # queda de solo lectura para cualquier script posterior
+                # que no use trigger (p.ej. speed_test_capture.py).
+                cam.TriggerMode.set("Off")
+            except Exception:
+                pass
 
         n = len(handler.frames)
         print(f"\nFrames recibidos: {n}  en {elapsed:.2f}s  "

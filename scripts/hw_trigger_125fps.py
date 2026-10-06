@@ -65,6 +65,13 @@ class Collector:
 
 def configure(cam: Camera, exposure_us: float) -> None:
     cam.set_pixel_format(PixelFormat.BayerRG8)
+    # Si una sesion anterior dejo la camara en modo libre con
+    # AcquisitionFrameRateEnable=True, TriggerMode.set("On") mas abajo
+    # falla con "write access not allowed": son modos mutuamente excluyentes.
+    try:
+        cam.AcquisitionFrameRateEnable.set(False)
+    except Exception:
+        pass
     # A 125fps hacen falta ~295 MB/s; el valor por defecto (200 MB/s, dejado
     # por una sesion anterior) capaba la camara a ~85fps y le hacia perder
     # casi todos los triggers al no poder seguir el ritmo del CC320.
@@ -143,6 +150,13 @@ def main() -> int:
 
             for cam in opened:
                 cam.stop_streaming()
+                try:
+                    # Deja la cámara en modo libre: si no, AcquisitionFrameRate
+                    # queda de solo lectura para cualquier script posterior
+                    # que no use trigger (p.ej. speed_test_capture.py).
+                    cam.TriggerMode.set("Off")
+                except Exception:
+                    pass
 
         if stopped_early:
             print(f"\n!! Corte de seguridad por RAM tras {elapsed:.2f}s "

@@ -36,6 +36,14 @@ class Collector:
 def configure(cam: Camera) -> None:
     """Solo toca la cámara. No manda nada al CC320."""
     cam.set_pixel_format(PixelFormat.BayerRG8)
+    # Si una sesión anterior dejó la cámara en modo libre con
+    # AcquisitionFrameRateEnable=True (p.ej. speed_test_capture.py a fps
+    # máximo), TriggerMode.set("On") más abajo falla con "write access not
+    # allowed": ambos modos son mutuamente excluyentes en esta cámara.
+    try:
+        cam.AcquisitionFrameRateEnable.set(False)
+    except Exception:
+        pass
     # Periodo de trigger generoso (2s) -> auto-exposición es segura aquí,
     # y da buena imagen en las 4 cámaras aunque tengan luz muy distinta.
     try:
@@ -94,6 +102,13 @@ def main() -> int:
             for cam in opened:
                 try:
                     cam.stop_streaming()
+                except Exception:
+                    pass
+                try:
+                    # Deja la cámara en modo libre: si no, AcquisitionFrameRate
+                    # queda de solo lectura para cualquier script posterior
+                    # que no use trigger (p.ej. speed_test_capture.py).
+                    cam.TriggerMode.set("Off")
                 except Exception:
                     pass
 
