@@ -35,7 +35,11 @@ def available_ram_bytes() -> int:
     return 2 * 1024 ** 3  # fallback conservador: asume solo 2GB libres
 
 PIXEL_FORMAT = PixelFormat.BayerRG8
-BAYER_TO_BGR = cv2.COLOR_BayerRG2BGR
+BAYER_TO_BGR = cv2.COLOR_BayerBG2BGR
+# Nota: aunque la cámara reporta PixelFormat "BayerRG8", el patrón real
+# visto por OpenCV corresponde a su constante "BG" (verificado comparando
+# contra la conversión BGR8 nativa del propio SDK) — con "RG2BGR" los
+# canales rojo y azul salían intercambiados.
 DEFAULT_EXPOSURE_US = 4000.0  # exposición corta y fija para no limitar el fps
 DEFAULT_STAGGER_S = 0.3  # separación entre start_streaming() de cada cámara.
 # Arrancar los 4 streams USB3 Vision en el mismo instante hace que el hub /

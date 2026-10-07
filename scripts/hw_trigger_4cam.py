@@ -136,7 +136,9 @@ def main() -> int:
             if not res.frames:
                 continue
             for tag, (t, raw) in [("primero", res.frames[0]), ("ultimo", res.frames[-1])]:
-                bgr = cv2.cvtColor(raw, cv2.COLOR_BayerRG2BGR)
+                # BayerBG2BGR, no RG2BGR: verificado contra la conversión
+                # BGR8 nativa del SDK (con RG2BGR salían R/B intercambiados).
+                bgr = cv2.cvtColor(raw, cv2.COLOR_BayerBG2BGR)
                 path = args.output / f"hw4cam_{cid}_{tag}.png"
                 cv2.imwrite(str(path), bgr)
                 print(f"  {cid} [{tag}] t={t - t0:6.2f}s -> {path}")
