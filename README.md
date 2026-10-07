@@ -29,14 +29,20 @@ disparo externo (Gardasoft CC320).
 
 ## Instalación en una máquina nueva
 
-1. **Instalar VimbaX.** Descarga el instalador de Allied Vision para Linux
+1. **Descargar este repositorio.** Si no tienes el código todavía:
+   ```bash
+   git clone https://github.com/carmelocuenca/PreMov.git
+   cd PreMov
+   ```
+
+2. **Instalar VimbaX.** Descarga el instalador de Allied Vision para Linux
    x86_64 y ejecútalo como root. Se instala en `/opt/VimbaX_<versión>/` e
    incluye un script que configura la variable de entorno
    `GENICAM_GENTL64_PATH` de forma permanente (crea
    `/etc/profile.d/VimbaX_GenTL_Path_64bit.sh`). Reinicia la sesión tras
    instalarlo.
 
-2. **Añadir el usuario al grupo `video`.** La regla udev de VimbaX
+3. **Añadir el usuario al grupo `video`.** La regla udev de VimbaX
    (`/etc/udev/rules.d/99-AVTUSBTL.rules`) intenta dar acceso a estas
    cámaras a cualquier usuario (`MODE="0666"`), pero si también hay
    instalado el SDK CVB de Stemmer Imaging (paquete `cvb*` en `/opt`),
@@ -52,16 +58,16 @@ disparo externo (Gardasoft CC320).
    Cierra la sesión y vuelve a entrar (la pertenencia a un grupo nuevo
    no se aplica a una sesión ya abierta).
 
-3. **Comprobar que las cámaras se detectan.** Con las 4 cámaras conectadas
+4. **Comprobar que las cámaras se detectan.** Con las 4 cámaras conectadas
    al hub USB, ejecuta:
    ```
    /opt/VimbaX_<versión>/bin/ListCameras_VmbCPP
    ```
    o abre `VimbaXViewer` (misma carpeta `bin/`). Debes ver las 4 cámaras
-   físicas (si solo ves "no transport layers were found", revisa el paso 1;
-   si las ves pero fallan al abrir por permisos, revisa el paso 2).
+   físicas (si solo ves "no transport layers were found", revisa el paso 2;
+   si las ves pero fallan al abrir por permisos, revisa el paso 3).
 
-4. **Instalar conda, si el usuario que vas a usar no lo tiene ya.** Cada
+5. **Instalar conda, si el usuario que vas a usar no lo tiene ya.** Cada
    usuario del sistema necesita su propia instalación (conda vive en el
    `$HOME` de quien lo instala, no es compartido entre usuarios). Con
    Miniforge, de forma no interactiva:
@@ -76,20 +82,20 @@ disparo externo (Gardasoft CC320).
    sesión de login completa (el instalador ya añade el bloque necesario a
    `~/.bashrc` para sesiones interactivas futuras).
 
-5. **Crear el entorno conda:**
+6. **Crear el entorno conda:**
    ```
    conda env create -f environment.yml
    conda activate PreMov
    ```
 
-6. **Instalar vmbpy** (las bindings de Python de VimbaX). Vienen dentro del
+7. **Instalar vmbpy** (las bindings de Python de VimbaX). Vienen dentro del
    propio SDK, no en PyPI — instala el wheel correspondiente a la versión
-   instalada en el paso 1, con el entorno `PreMov` activo:
+   instalada en el paso 2, con el entorno `PreMov` activo:
    ```
    pip install /opt/VimbaX_<versión>/api/python/vmbpy-*.whl
    ```
 
-7. **(Solo si usas el CC320)** copia `.env.example` a `.env` y ajusta la IP
+8. **(Solo si usas el CC320)** copia `.env.example` a `.env` y ajusta la IP
    a la de tu controlador:
    ```
    cp .env.example .env
@@ -97,7 +103,7 @@ disparo externo (Gardasoft CC320).
    export $(grep -v '^#' .env | xargs)
    ```
 
-8. **Probar.** Con el entorno activado y `GENICAM_GENTL64_PATH` presente en
+9. **Probar.** Con el entorno activado y `GENICAM_GENTL64_PATH` presente en
    la sesión (`echo $GENICAM_GENTL64_PATH`):
    ```
    python scripts/capture_frames.py
