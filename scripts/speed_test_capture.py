@@ -82,6 +82,46 @@ class RawCollector:
         cam.queue_frame(frame)
 
 
+def set_resolution(cam: Camera, resolution: Optional["tuple[int, int]"]) -> None:
+    """Fuerza Width/Height/Offset de la cámara. `resolution=None` usa la
+    resolución máxima disponible (tras el binning aplicado); un `(ancho,
+    alto)` concreto recorta el sensor a ese tamaño, centrado — no reescala."""
+    try:
+        # Los offsets se resetean primero: si no, limitan el rango máximo
+        # que luego se le puede pedir a Width/Height.
+        cam.OffsetX.set(0)
+        cam.OffsetY.set(0)
+
+        if resolution is None:
+            cam.Width.set(cam.WidthMax.get())
+            cam.Height.set(cam.HeightMax.get())
+        else:
+            req_w, req_h = resolution
+            wlo, whi = cam.Width.get_range()
+            hlo, hhi = cam.Height.get_range()
+            w_inc = cam.Width.get_increment()
+            h_inc = cam.Height.get_increment()
+            w = min(max(req_w, wlo), whi)
+            w -= (w - wlo) % w_inc
+            h = min(max(req_h, hlo), hhi)
+            h -= (h - hlo) % h_inc
+            cam.Width.set(w)
+            cam.Height.set(h)
+
+            # Centra el recorte en el sensor en vez de dejarlo anclado
+            # arriba a la izquierda.
+            ox_lo, ox_hi = cam.OffsetX.get_range()
+            oy_lo, oy_hi = cam.OffsetY.get_range()
+            ox_inc = cam.OffsetX.get_increment()
+            oy_inc = cam.OffsetY.get_increment()
+            ox = ox_lo + ((ox_hi - ox_lo) // 2 // ox_inc) * ox_inc
+            oy = oy_lo + ((oy_hi - oy_lo) // 2 // oy_inc) * oy_inc
+            cam.OffsetX.set(ox)
+            cam.OffsetY.set(oy)
+    except Exception:
+        pass
+
+
 def configure_camera(cam: Camera, exposure_us: Optional[float], binning: int = 1,
                       throughput_bps: Optional[float] = None,
                       target_fps: Optional[float] = None,
@@ -119,42 +159,9 @@ def configure_camera(cam: Camera, exposure_us: Optional[float], binning: int = 1
 
     # Al cambiar el binning, WidthMax/HeightMax cambian, pero Width/Height no
     # se reajustan solos: si venían recortados de una sesión anterior se
-    # quedan así. Se fuerzan siempre, a la resolución máxima disponible o a
-    # la pedida por el usuario.
-    try:
-        # Los offsets se resetean primero: si no, limitan el rango máximo
-        # que luego se le puede pedir a Width/Height.
-        cam.OffsetX.set(0)
-        cam.OffsetY.set(0)
-
-        if resolution is None:
-            cam.Width.set(cam.WidthMax.get())
-            cam.Height.set(cam.HeightMax.get())
-        else:
-            req_w, req_h = resolution
-            wlo, whi = cam.Width.get_range()
-            hlo, hhi = cam.Height.get_range()
-            w_inc = cam.Width.get_increment()
-            h_inc = cam.Height.get_increment()
-            w = min(max(req_w, wlo), whi)
-            w -= (w - wlo) % w_inc
-            h = min(max(req_h, hlo), hhi)
-            h -= (h - hlo) % h_inc
-            cam.Width.set(w)
-            cam.Height.set(h)
-
-            # Centra el recorte en el sensor en vez de dejarlo anclado
-            # arriba a la izquierda.
-            ox_lo, ox_hi = cam.OffsetX.get_range()
-            oy_lo, oy_hi = cam.OffsetY.get_range()
-            ox_inc = cam.OffsetX.get_increment()
-            oy_inc = cam.OffsetY.get_increment()
-            ox = ox_lo + ((ox_hi - ox_lo) // 2 // ox_inc) * ox_inc
-            oy = oy_lo + ((oy_hi - oy_lo) // 2 // oy_inc) * oy_inc
-            cam.OffsetX.set(ox)
-            cam.OffsetY.set(oy)
-    except Exception:
-        pass
+    # quedan así. set_resolution() los fuerza siempre, a la resolución
+    # máxima disponible o a la pedida por el usuario.
+    set_resolution(cam, resolution)
 
     if throughput_bps is not None:
         try:

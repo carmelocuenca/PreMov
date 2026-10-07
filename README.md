@@ -200,16 +200,35 @@ scripts):
   python scripts/hw_trigger_4cam.py -d 30
   ```
 
-- `scripts/hw_trigger_125fps.py` — variante para disparo a alta frecuencia
-  (pensada para ~125 fps), con exposición fija corta y el mismo guardia de
-  RAM que `speed_test_capture.py`. Sí abre/cierra la puerta del CC320
-  (`--cc320-ip` / `PREMOV_CC320_IP`), con el mínimo de comandos posible: el
-  CC320 puede quedarse bloqueado si recibe demasiados comandos de
-  reconfiguración seguidos, así que la configuración de periodo/pulso debe
-  quedar ya hecha de antemano desde su interfaz.
+- `scripts/hw_trigger_capture.py` — las **4 cámaras a la vez**, con fps y
+  resolución configurables. Sí abre/cierra la puerta del CC320 (`RV3,1` /
+  `RV3,0`, un único comando cada vez), pero **nunca programa su periodo**:
+  el CC320 puede quedarse bloqueado si recibe demasiados comandos de
+  reconfiguración seguidos (ya ha pasado en este proyecto), así que el
+  periodo/anchura de pulso siempre se configuran a mano desde su interfaz
+  web/teclado, nunca desde este script.
+
+  En su lugar, el script **lee** (de solo lectura, comando `ST`) el periodo
+  que el CC320 ya tiene programado, y lo usa para calcular una exposición
+  segura por defecto (90% del periodo). La duración (`-d`) es obligatoria;
+  fps y resolución son opcionales:
+
   ```
-  python scripts/hw_trigger_125fps.py -d 5
+  # usa el fps que ya esté programado en el CC320, resolución máxima
+  python scripts/hw_trigger_capture.py -d 5
+
+  # resolución recortada (más fps posibles si además subes el periodo del
+  # CC320 a mano)
+  python scripts/hw_trigger_capture.py -d 5 --resolution 1920x1080
+
+  # --fps es solo una comprobación: si no coincide con lo que el CC320
+  # tiene programado, el script no hace nada y te dice qué cambiar
+  python scripts/hw_trigger_capture.py -d 5 --fps 125
   ```
+
+  Si hay un error (de red con el CC320, de cámara, lo que sea), el script
+  no intenta recuperarse ni reintentar: para limpiamente y muestra el tipo
+  de excepción y su mensaje.
 
 ### Diagnóstico del bus USB (`scripts/probe_dropout_timing.py`,
 `scripts/probe_staggered_start.py`)
