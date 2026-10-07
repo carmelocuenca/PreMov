@@ -139,20 +139,54 @@ def configure(cam: Camera, exposure_us: float, resolution: Optional["tuple[int, 
     cam.TriggerMode.set("On")
 
 
+EPILOG = """\
+Ejemplos:
+  # 5s, usando el fps y la resolución que ya tenga el CC320/la cámara
+  python hw_trigger_capture.py -d 5
+
+  # 5s a 60fps: si el CC320 no está ya a 60fps, lo reprograma antes de capturar
+  python hw_trigger_capture.py -d 5 --fps 60
+
+  # 2.5s, recorte 1K (más fps posibles que a resolución completa)
+  python hw_trigger_capture.py -d 2.5 --resolution 1920x1080
+
+  # el recorte con el que esta cámara alcanza su techo real (176fps)
+  python hw_trigger_capture.py -d 2 --fps 176 --resolution 1936x862
+
+Resoluciones de referencia de esta cámara (Alvium 1800 U-240c), ANCHOxALTO:
+  1936x1216   máxima del sensor (valor por defecto, sin --resolution)
+  1920x1080   1080p/1K estándar
+  1936x862    recorte con el que se alcanzan los 176fps reales de la cámara
+  968x608     mitad de la máxima (menos detalle, más margen de fps/ancho de banda)
+
+--resolution acepta cualquier ANCHOxALTO dentro del rango del sensor (no
+hace falta que sea uno de los de arriba): se recorta centrado al valor
+más cercano permitido por los incrementos de la cámara, nunca reescala.
+"""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        description=__doc__, epilog=EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-d", "--duration", type=float, required=True,
-                         help="duración de la captura en segundos (obligatorio)")
+                         help="duración de la captura en segundos. "
+                              "Obligatorio, sin valor por defecto. "
+                              "Ejemplo: -d 5  (5 segundos)")
     parser.add_argument("--fps", type=float, default=None,
-                         help="fps deseado. Si no coincide con el periodo ya "
-                              "programado en el CC320, lo reprograma (un único "
-                              "comando) antes de capturar. Si no se indica, "
-                              "deja el fps que ya esté programado tal cual.")
+                         help="fps deseado (p.ej. --fps 60). Si no coincide "
+                              "con el periodo ya programado en el CC320, lo "
+                              "reprograma (un único comando, ver manual CC320 "
+                              "sección 10.3) antes de capturar. Opcional: si "
+                              "no se indica, deja el fps que ya esté "
+                              "programado en el CC320 tal cual.")
     parser.add_argument("--resolution", type=parse_resolution, default=None,
-                         help="resolución ANCHOxALTO (p.ej. 1920x1080). Por "
-                              "defecto, la máxima del sensor, recortada al "
-                              "centro si se especifica un valor menor.")
+                         help="resolución ANCHOxALTO (p.ej. --resolution "
+                              "1920x1080). Opcional: por defecto, la máxima "
+                              "del sensor (1936x1216 en esta cámara). Un "
+                              "valor menor recorta centrado, no reescala — "
+                              "ver más abajo valores de referencia conocidos "
+                              "de esta cámara.")
     parser.add_argument("-e", "--exposure", type=float, default=None,
                          help="exposición fija en microsegundos. Por defecto, "
                               "90%% del periodo de trigger ya programado en "
@@ -163,8 +197,12 @@ def main() -> int:
                               "llenar de frames en crudo antes de cortar la "
                               "captura por seguridad (default 0.6)")
     parser.add_argument("-o", "--output", type=Path,
-                         default=Path(__file__).resolve().parent.parent / "captures" / "hwtrigger")
-    parser.add_argument("--prefix", type=str, default="hwtrig")
+                         default=Path(__file__).resolve().parent.parent / "captures" / "hwtrigger",
+                         help="carpeta de salida para los .mp4 (default "
+                              "captures/hwtrigger)")
+    parser.add_argument("--prefix", type=str, default="hwtrig",
+                         help="prefijo de los ficheros .mp4 generados "
+                              "(default 'hwtrig')")
     parser.add_argument("--cc320-ip", default=os.environ.get("PREMOV_CC320_IP"),
                          help="IP del controlador CC320 (o variable de entorno "
                               "PREMOV_CC320_IP; ver .env.example)")
