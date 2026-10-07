@@ -263,44 +263,63 @@ def main() -> int:
 
             with ExitStack() as stack:
                 opened = []
-                for cam in cams:
-                    stack.enter_context(cam)
-                    configure(cam, exposure_us, args.resolution)
-                    dims[cam.get_id()] = (cam.Width.get(), cam.Height.get())
-                    handler = results[cam.get_id()]
-                    cam.start_streaming(handler=handler, buffer_count=64)
-                    opened.append(cam)
-                    w, h = dims[cam.get_id()]
-                    print(f"{cam.get_id()}: armada (TriggerMode=On, Line0, "
-                          f"{w}x{h}, exposición {exposure_us:.0f}us)")
-                    time.sleep(STAGGER_S)
+                gate_opened = False
+                try:
+                    for cam in cams:
+                        stack.enter_context(cam)
+                        configure(cam, exposure_us, args.resolution)
+                        dims[cam.get_id()] = (cam.Width.get(), cam.Height.get())
+                        handler = results[cam.get_id()]
+                        cam.start_streaming(handler=handler, buffer_count=64)
+                        opened.append(cam)
+                        w, h = dims[cam.get_id()]
+                        print(f"{cam.get_id()}: armada (TriggerMode=On, Line0, "
+                              f"{w}x{h}, exposición {exposure_us:.0f}us)")
+                        time.sleep(STAGGER_S)
 
-                t_ready = time.perf_counter()
-                print(f"\nLas {len(opened)} cámaras armadas. Abriendo el gate (RV3,1)...")
-                print(" ", cc320("RV3,1", args.cc320_ip))
+                    t_ready = time.perf_counter()
+                    print(f"\nLas {len(opened)} cámaras armadas. Abriendo el gate (RV3,1)...")
+                    print(" ", cc320("RV3,1", args.cc320_ip))
+                    gate_opened = True
 
-                deadline = t_ready + args.duration
-                while time.perf_counter() < deadline:
-                    time.sleep(0.1)
-                    used = sum(len(r.frames) * dims[cid][0] * dims[cid][1]
-                               for cid, r in results.items())
-                    if used >= ram_budget:
-                        stopped_early = True
-                        break
+                    deadline = t_ready + args.duration
+                    while time.perf_counter() < deadline:
+                        time.sleep(0.1)
+                        used = sum(len(r.frames) * dims[cid][0] * dims[cid][1]
+                                   for cid, r in results.items())
+                        if used >= ram_budget:
+                            stopped_early = True
+                            break
 
-                print("Cerrando el gate (RV3,0)...")
-                print(" ", cc320("RV3,0", args.cc320_ip))
-                elapsed = time.perf_counter() - t_ready
-
-                for cam in opened:
-                    cam.stop_streaming()
-                    try:
-                        # Deja la cámara en modo libre: si no,
-                        # AcquisitionFrameRate queda de solo lectura para
-                        # cualquier script posterior que no use trigger.
-                        cam.TriggerMode.set("Off")
-                    except Exception:
-                        pass
+                    print("Cerrando el gate (RV3,0)...")
+                    print(" ", cc320("RV3,0", args.cc320_ip))
+                    gate_opened = False
+                    elapsed = time.perf_counter() - t_ready
+                finally:
+                    # Se ejecuta pase lo que pase (también si algo de arriba
+                    # lanza una excepción) para no dejar el CC320 disparando
+                    # pulsos indefinidamente ni las cámaras atascadas en
+                    # TriggerMode=On, lo que rompería cualquier script
+                    # posterior que no use trigger.
+                    if gate_opened:
+                        try:
+                            print("Cerrando el gate tras un error (RV3,0)...")
+                            cc320("RV3,0", args.cc320_ip)
+                        except Exception as e:
+                            print(f"!! No se pudo cerrar el gate del CC320 "
+                                  f"tras el error ({type(e).__name__}): puede "
+                                  f"seguir disparando pulsos. Ciérralo a mano "
+                                  f"(RV3,0 o desde su interfaz web).",
+                                  file=sys.stderr)
+                    for cam in opened:
+                        try:
+                            cam.stop_streaming()
+                        except Exception:
+                            pass
+                        try:
+                            cam.TriggerMode.set("Off")
+                        except Exception:
+                            pass
     except Exception as e:
         print(f"Error durante la captura ({type(e).__name__}): {e}", file=sys.stderr)
         return 1
