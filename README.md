@@ -137,9 +137,20 @@ python scripts/speed_test_capture.py -d 15 --auto-exposure
 # fps objetivo concreto, garantizando que se cumple aunque haya poca luz
 python scripts/speed_test_capture.py --target-fps 60 --auto-exposure --guarantee-fps
 
+# fps objetivo concreto con duración corta (p.ej. 2.5s a 125fps): con la
+# exposición manual por defecto (4000us, más corta que el periodo de 8ms
+# que exige 125fps) no hace falta tocar nada más
+python scripts/speed_test_capture.py -d 2.5 --target-fps 125
+
 # a mitad de resolución (más fps)
 python scripts/speed_test_capture.py -b 2
 ```
+
+El techo real medido de esta cámara es 128.64fps, así que un `--target-fps`
+cercano a ese valor (como 125) está muy próximo al límite pero debería
+cumplirse sin problema — esto es captura en software libre, sin relación
+con la no determinación que sí aparece al disparar las 4 cámaras a la vez
+por hardware a esa misma frecuencia (ver más abajo, CC320).
 
 Incluye un guardia de seguridad de RAM: los fotogramas se acumulan sin
 comprimir en memoria mientras dura la captura (pueden ser varios GB/s con
