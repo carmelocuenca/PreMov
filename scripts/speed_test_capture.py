@@ -85,9 +85,15 @@ class RawCollector:
 def configure_camera(cam: Camera, exposure_us: Optional[float], binning: int = 1,
                       throughput_bps: Optional[float] = None,
                       target_fps: Optional[float] = None,
-                      guarantee_fps: bool = False) -> float:
-    """Configura binning, pixel format BayerRG8 y frame rate al máximo
-    permitido. Devuelve el frame rate configurado.
+                      guarantee_fps: bool = False,
+                      resolution: Optional["tuple[int, int]"] = None) -> float:
+    """Configura binning, resolución, pixel format BayerRG8 y frame rate al
+    máximo permitido. Devuelve el frame rate configurado.
+
+    `resolution=None` (por defecto) usa la resolución máxima del sensor
+    (tras el binning aplicado). Un `(ancho, alto)` concreto recorta el
+    sensor a ese tamaño, centrado — útil p.ej. para el recorte a 1936x862
+    con el que se alcanzan los 176fps reales de esta cámara (ver README).
 
     `exposure_us=None` deja la auto-exposición activa (cada cámara ajusta su
     propio brillo según su iluminación real — necesario cuando las 4 cámaras
@@ -112,11 +118,41 @@ def configure_camera(cam: Camera, exposure_us: Optional[float], binning: int = 1
         pass
 
     # Al cambiar el binning, WidthMax/HeightMax cambian, pero Width/Height no
-    # se reajustan solos: si venían recortados de una sesión con más binning
-    # se quedan así. Se fuerzan siempre a la resolución máxima disponible.
+    # se reajustan solos: si venían recortados de una sesión anterior se
+    # quedan así. Se fuerzan siempre, a la resolución máxima disponible o a
+    # la pedida por el usuario.
     try:
-        cam.Width.set(cam.WidthMax.get())
-        cam.Height.set(cam.HeightMax.get())
+        # Los offsets se resetean primero: si no, limitan el rango máximo
+        # que luego se le puede pedir a Width/Height.
+        cam.OffsetX.set(0)
+        cam.OffsetY.set(0)
+
+        if resolution is None:
+            cam.Width.set(cam.WidthMax.get())
+            cam.Height.set(cam.HeightMax.get())
+        else:
+            req_w, req_h = resolution
+            wlo, whi = cam.Width.get_range()
+            hlo, hhi = cam.Height.get_range()
+            w_inc = cam.Width.get_increment()
+            h_inc = cam.Height.get_increment()
+            w = min(max(req_w, wlo), whi)
+            w -= (w - wlo) % w_inc
+            h = min(max(req_h, hlo), hhi)
+            h -= (h - hlo) % h_inc
+            cam.Width.set(w)
+            cam.Height.set(h)
+
+            # Centra el recorte en el sensor en vez de dejarlo anclado
+            # arriba a la izquierda.
+            ox_lo, ox_hi = cam.OffsetX.get_range()
+            oy_lo, oy_hi = cam.OffsetY.get_range()
+            ox_inc = cam.OffsetX.get_increment()
+            oy_inc = cam.OffsetY.get_increment()
+            ox = ox_lo + ((ox_hi - ox_lo) // 2 // ox_inc) * ox_inc
+            oy = oy_lo + ((oy_hi - oy_lo) // 2 // oy_inc) * oy_inc
+            cam.OffsetX.set(ox)
+            cam.OffsetY.set(oy)
     except Exception:
         pass
 
@@ -232,7 +268,8 @@ def run_all_staggered(cams: List[Camera], duration_s: float, exposure_us: Option
                        throughput_bps: Optional[float] = None,
                        ram_safety_fraction: float = 0.6,
                        target_fps: Optional[float] = None,
-                       guarantee_fps: bool = False) -> List[CamResult]:
+                       guarantee_fps: bool = False,
+                       resolution: Optional["tuple[int, int]"] = None) -> List[CamResult]:
     """Abre y configura las 4 cámaras, y arranca su streaming una a una con
     `stagger_s` de separación (no todas a la vez). El envío de frames es
     asíncrono vía callback interno de VmbC, así que no hace falta un hilo por
@@ -258,7 +295,7 @@ def run_all_staggered(cams: List[Camera], duration_s: float, exposure_us: Option
                 stack.enter_context(cam)
                 res.configured_fps = configure_camera(cam, exposure_us, binning,
                                                         throughput_bps, target_fps,
-                                                        guarantee_fps)
+                                                        guarantee_fps, resolution)
                 res.width = cam.Width.get()
                 res.height = cam.Height.get()
 
@@ -344,6 +381,16 @@ def encode_mp4(result: CamResult, out_dir: Path, prefix: str = "speedtest") -> O
     return out_path
 
 
+def parse_resolution(s: str) -> "tuple[int, int]":
+    try:
+        w_str, h_str = s.lower().split("x")
+        return (int(w_str), int(h_str))
+    except Exception:
+        raise argparse.ArgumentTypeError(
+            f"'{s}' no es una resolución válida, usa el formato ANCHOxALTO "
+            f"(p.ej. 1920x1080)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-d", "--duration", type=float, default=15.0,
@@ -356,6 +403,12 @@ def main() -> int:
                               "la misma luz y algunas salen negras con exposición fija)")
     parser.add_argument("-b", "--binning", type=int, default=1,
                          help="binning horizontal/vertical (1=resolución completa, 2=mitad, ...)")
+    parser.add_argument("--resolution", type=parse_resolution, default=None,
+                         help="resolución ANCHOxALTO (p.ej. 1920x1080). Por defecto, "
+                              "la máxima del sensor (tras aplicar el binning). Un "
+                              "valor menor recorta el sensor centrado (p.ej. "
+                              "1936x862 para alcanzar los 176fps reales de la "
+                              "cámara, ver README).")
     parser.add_argument("--stagger", type=float, default=DEFAULT_STAGGER_S,
                          help="segundos entre el arranque de cada cámara (default 0.3; "
                               "0 = todas a la vez, reproduce las caídas por el bus)")
@@ -405,7 +458,8 @@ def main() -> int:
         results = run_all_staggered(cams, args.duration, exposure,
                                      args.binning, args.stagger,
                                      args.throughput, args.ram_fraction,
-                                     args.target_fps, args.guarantee_fps)
+                                     args.target_fps, args.guarantee_fps,
+                                     args.resolution)
         wall_duration = time.perf_counter() - t0
 
         print(f"Captura finalizada en {wall_duration:.2f}s de pared.\n")

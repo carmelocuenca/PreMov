@@ -148,9 +148,22 @@ python scripts/speed_test_capture.py --target-fps 60 --auto-exposure --guarantee
 # que exige 125fps) no hace falta tocar nada más
 python scripts/speed_test_capture.py -d 2.5 --target-fps 125
 
-# a mitad de resolución (más fps)
+# a mitad de resolución por binning (más fps)
 python scripts/speed_test_capture.py -b 2
+
+# resolución 1K estándar, recortada centrada en el sensor (más fps que a
+# resolución completa: 143.67fps medidos frente a 128.64fps)
+python scripts/speed_test_capture.py --resolution 1920x1080
+
+# recorte que alcanza los 176fps reales de esta cámara (su techo a
+# resolución completa son 128.64fps)
+python scripts/speed_test_capture.py --resolution 1936x862
 ```
+
+Por defecto (sin `--resolution`) usa la resolución máxima del sensor. Un
+valor menor recorta la imagen centrada (no reescala) — por eso recortes
+más pequeños permiten más fps, al leer menos píxeles del sensor por
+fotograma.
 
 El techo real medido de esta cámara es 128.64fps, así que un `--target-fps`
 cercano a ese valor (como 125) está muy próximo al límite pero debería
