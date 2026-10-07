@@ -238,6 +238,28 @@ scripts):
   no intenta recuperarse ni reintentar: para limpiamente y muestra el tipo
   de excepción y su mensaje.
 
+### Comprobar visualmente la sincronización (`scripts/make_mosaic.py`)
+
+Toma los 4 vídeos de una captura sincronizada y monta un mosaico 2x2 (cada
+uno reducido al 50%), para ver a simple vista si las 4 cámaras van a la
+par. Útil sobre todo si las imágenes llevan un reloj en pantalla (p.ej.
+apuntando las 4 cámaras a un cronómetro de milisegundos): en el mosaico se
+ve de un vistazo si las 4 marcan lo mismo o si alguna va desfasada.
+
+```
+python scripts/make_mosaic.py \
+  captures/hwtrigger/hwtrig_<ID1>.mp4 \
+  captures/hwtrigger/hwtrig_<ID2>.mp4 \
+  captures/hwtrigger/hwtrig_<ID3>.mp4 \
+  captures/hwtrigger/hwtrig_<ID4>.mp4
+```
+
+Genera `mosaic_2x2.mp4` junto a los vídeos de entrada (o en `-o DIR` si se
+indica), más una copia reducida al 50% de cada vídeo individual
+(`half_<nombre>.mp4`). No depende de qué script haya generado los 4
+vídeos de entrada — sirve igual para los de `hw_trigger_capture.py` que
+para los de `speed_test_capture.py`.
+
 ### Diagnóstico del bus USB (`scripts/probe_dropout_timing.py`,
 `scripts/probe_staggered_start.py`)
 
