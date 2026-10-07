@@ -2,18 +2,18 @@
 """Captura sincronizada de las 4 cámaras por trigger de hardware desde el
 CC320 (vía Line0), con fps y resolución configurables.
 
-El periodo del trigger (fps) NO lo programa este script: se asume ya
-configurado de antemano en el CC320 (desde su web/teclado). Este script
-solo LEE ese periodo (comando de solo lectura `ST`, sin escribir nada en
-el CC320) para dos cosas:
-  - calcular una exposición segura por defecto si no se indica -e
-  - si se pide --fps, comprobar que coincide con lo ya programado; si no
-    coincide, el script para sin tocar nada (ni cámaras ni CC320) y explica
-    cómo cambiarlo
+Este script siempre LEE primero el periodo de trigger ya programado en el
+CC320 (comando de solo lectura `ST`). Con ese dato:
+  - si no se pide --fps, lo deja como está y lo usa para calcular una
+    exposición segura por defecto (si no se indica -e);
+  - si se pide --fps y ya coincide, tampoco toca nada;
+  - si se pide --fps y NO coincide, lo programa (comando `RB1,p`, un único
+    envío, sin guardarlo de forma permanente con AW) y vuelve a leer para
+    confirmar el cambio antes de seguir.
 
-Al capturar, sí abre/cierra la puerta del CC320 (RV3,1 / RV3,0 — un canal
-de salida usado como interruptor por software) con el mínimo de comandos
-posible: un único RV3,1 al empezar, un único RV3,0 al terminar.
+Al capturar, también abre/cierra la puerta del CC320 (RV3,1 / RV3,0 — un
+canal de salida usado como interruptor por software) con el mínimo de
+comandos posible: un único RV3,1 al empezar, un único RV3,0 al terminar.
 
 Uso:
     python hw_trigger_capture.py -d SEGUNDOS [--fps FPS] [--resolution WxH]
@@ -85,6 +85,18 @@ def read_trigger_period_ms(ip: str) -> float:
     return value
 
 
+def set_trigger_period_ms(ip: str, period_ms: float, settle: float = 0.5) -> str:
+    """Programa el periodo del trigger interno del CC320 (comando RB1,p —
+    manual CC320 sección 10.3, "Set the internal free running trigger").
+    Un único comando, sin reintentos: enviar muchos comandos de
+    reconfiguración seguidos ya bloqueó el CC320 una vez en este proyecto.
+
+    No se envía AW: el cambio no se guarda de forma permanente, así que un
+    corte de corriente del CC320 restaura el último periodo que sí se
+    guardó (desde su web/teclado, o con AW)."""
+    return cc320(f"RB1,{period_ms:.1f}ms", ip, settle=settle)
+
+
 def available_ram_bytes() -> int:
     try:
         with open("/proc/meminfo") as f:
@@ -133,10 +145,10 @@ def main() -> int:
     parser.add_argument("-d", "--duration", type=float, required=True,
                          help="duración de la captura en segundos (obligatorio)")
     parser.add_argument("--fps", type=float, default=None,
-                         help="fps esperado. Se compara (solo lectura) contra "
-                              "el periodo ya programado en el CC320; si no "
-                              "coincide, el script para sin hacer nada. Si no "
-                              "se indica, usa el fps que ya esté programado.")
+                         help="fps deseado. Si no coincide con el periodo ya "
+                              "programado en el CC320, lo reprograma (un único "
+                              "comando) antes de capturar. Si no se indica, "
+                              "deja el fps que ya esté programado tal cual.")
     parser.add_argument("--resolution", type=parse_resolution, default=None,
                          help="resolución ANCHOxALTO (p.ej. 1920x1080). Por "
                               "defecto, la máxima del sensor, recortada al "
@@ -173,11 +185,25 @@ def main() -> int:
     configured_fps = 1000.0 / period_ms
 
     if args.fps is not None and abs(configured_fps - args.fps) / args.fps > 0.01:
-        print(f"El CC320 está programado a {configured_fps:.2f}fps (periodo "
-              f"{period_ms:.3f}ms), no a los {args.fps:.2f}fps pedidos. "
-              f"Cambia el periodo desde la web/teclado del CC320, o quita "
-              f"--fps para usar el que ya está programado.", file=sys.stderr)
-        return 1
+        target_period_ms = round(1000.0 / args.fps, 1)
+        print(f"El CC320 está a {configured_fps:.2f}fps (periodo {period_ms:.3f}ms); "
+              f"programando {args.fps:.2f}fps pedidos (periodo {target_period_ms:.1f}ms)...")
+        try:
+            set_trigger_period_ms(args.cc320_ip, target_period_ms)
+            period_ms = read_trigger_period_ms(args.cc320_ip)
+        except Exception as e:
+            print(f"No se pudo programar/verificar el periodo del CC320 "
+                  f"({type(e).__name__}): {e}", file=sys.stderr)
+            return 1
+
+        configured_fps = 1000.0 / period_ms
+        if abs(configured_fps - args.fps) / args.fps > 0.01:
+            print(f"El CC320 sigue sin coincidir tras programarlo: ahora está "
+                  f"a {configured_fps:.2f}fps (periodo {period_ms:.3f}ms), no "
+                  f"a los {args.fps:.2f}fps pedidos.", file=sys.stderr)
+            return 1
+        print(f"CC320 reprogramado a {configured_fps:.2f}fps "
+              f"(periodo {period_ms:.3f}ms).")
 
     exposure_us = args.exposure if args.exposure is not None else 0.9 * period_ms * 1000.0
     args.output.mkdir(parents=True, exist_ok=True)

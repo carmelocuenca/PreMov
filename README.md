@@ -201,30 +201,38 @@ scripts):
   ```
 
 - `scripts/hw_trigger_capture.py` — las **4 cámaras a la vez**, con fps y
-  resolución configurables. Sí abre/cierra la puerta del CC320 (`RV3,1` /
-  `RV3,0`, un único comando cada vez), pero **nunca programa su periodo**:
-  el CC320 puede quedarse bloqueado si recibe demasiados comandos de
-  reconfiguración seguidos (ya ha pasado en este proyecto), así que el
-  periodo/anchura de pulso siempre se configuran a mano desde su interfaz
-  web/teclado, nunca desde este script.
+  resolución configurables. Siempre **lee primero** (comando `ST`) el
+  periodo de trigger que el CC320 ya tiene programado:
 
-  En su lugar, el script **lee** (de solo lectura, comando `ST`) el periodo
-  que el CC320 ya tiene programado, y lo usa para calcular una exposición
-  segura por defecto (90% del periodo). La duración (`-d`) es obligatoria;
-  fps y resolución son opcionales:
+  - sin `--fps`, lo deja tal cual, y lo usa para calcular una exposición
+    segura por defecto (90% del periodo);
+  - con `--fps`, si ya coincide tampoco toca nada; si no coincide, lo
+    **reprograma** (comando `RB1,p` — manual CC320 sección 10.3 — un único
+    envío, sin guardarlo de forma permanente con `AW`) y vuelve a leer para
+    confirmar el cambio antes de capturar.
+
+  También abre/cierra la puerta del CC320 (`RV3,1` / `RV3,0`, un único
+  comando cada vez). En total, como mucho son 5 comandos por ejecución
+  (leer, programar, releer, abrir puerta, cerrar puerta) — nunca una
+  ráfaga de reconfiguraciones seguidas, que es lo que bloqueó el CC320 una
+  vez en este proyecto. La duración (`-d`) es obligatoria; fps y
+  resolución son opcionales:
 
   ```
   # usa el fps que ya esté programado en el CC320, resolución máxima
   python scripts/hw_trigger_capture.py -d 5
 
-  # resolución recortada (más fps posibles si además subes el periodo del
-  # CC320 a mano)
+  # resolución recortada (más fps posibles)
   python scripts/hw_trigger_capture.py -d 5 --resolution 1920x1080
 
-  # --fps es solo una comprobación: si no coincide con lo que el CC320
-  # tiene programado, el script no hace nada y te dice qué cambiar
-  python scripts/hw_trigger_capture.py -d 5 --fps 125
+  # si el CC320 no está ya a 60fps, lo reprograma antes de capturar
+  python scripts/hw_trigger_capture.py -d 5 --fps 60
   ```
+
+  El periodo del CC320 se fija en pasos de 0.1ms, así que el fps real tras
+  programarlo puede no ser exacto (p.ej. pedir 60fps deja el CC320 a
+  59.88fps, el más cercano posible). El mensaje de confirmación muestra el
+  valor real aplicado.
 
   Si hay un error (de red con el CC320, de cámara, lo que sea), el script
   no intenta recuperarse ni reintentar: para limpiamente y muestra el tipo
