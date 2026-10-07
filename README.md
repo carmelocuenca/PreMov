@@ -55,7 +55,7 @@ disparo externo (Gardasoft CC320).
 3. **Comprobar que las cámaras se detectan.** Con las 4 cámaras conectadas
    al hub USB, ejecuta:
    ```
-   /opt/VimbaX_<versión>/bin/VmbCPP/Examples/ListCameras/VmbCPP_ListCamerasExample
+   /opt/VimbaX_<versión>/bin/ListCameras_VmbCPP
    ```
    o abre `VimbaXViewer` (misma carpeta `bin/`). Debes ver las 4 cámaras
    físicas (si solo ves "no transport layers were found", revisa el paso 1;
