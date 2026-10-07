@@ -67,12 +67,22 @@ def cc320(cmd: str, ip: str, connect_timeout: float = 3.0, settle: float = 0.3) 
 
 def read_trigger_period_ms(ip: str) -> float:
     """Lee el periodo de trigger actualmente programado en el CC320 (comando
-    de solo lectura ST). No cambia nada en el dispositivo."""
+    de solo lectura ST). No cambia nada en el dispositivo.
+
+    El CC320 reporta el periodo en la unidad que corresponda según su
+    magnitud (s, ms o us — ver manual CC320 sección 10.2/10.3, comando ST),
+    no siempre en ms."""
     reply = cc320("ST", ip)
-    m = re.search(r"trigger period\s*=\s*([\d.]+)\s*ms", reply, re.IGNORECASE)
+    m = re.search(r"trigger period\s*=\s*([\d.]+)\s*(ms|us|s)?", reply, re.IGNORECASE)
     if not m:
         raise RuntimeError(f"no se pudo interpretar la respuesta de ST: {reply!r}")
-    return float(m.group(1))
+    value = float(m.group(1))
+    unit = (m.group(2) or "ms").lower()
+    if unit == "s":
+        return value * 1000.0
+    if unit == "us":
+        return value / 1000.0
+    return value
 
 
 def available_ram_bytes() -> int:
