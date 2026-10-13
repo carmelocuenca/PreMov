@@ -31,7 +31,7 @@ from typing import Optional
 import cv2
 from vmbpy import Camera, Frame, FrameStatus, PixelFormat, Stream, VmbSystem
 
-from speed_test_capture import parse_resolution, set_resolution
+from speed_test_capture import parse_resolution, set_resolution, wait_before_recording
 
 CC320_PORT = 30313
 STAGGER_S = 0.3
@@ -153,6 +153,10 @@ Ejemplos:
   # el recorte con el que esta cámara alcanza su techo real (176fps)
   python hw_trigger_capture.py -d 2 --fps 176 --resolution 1936x862
 
+  # espera a ENTER, cuenta atrás 5s y pita al abrir el gate — para grabarte
+  # solo, dando tiempo a colocarte delante de las cámaras
+  python hw_trigger_capture.py -d 5 -p -s 5 -b
+
 Resoluciones de referencia de esta cámara (Alvium 1800 U-240c), ANCHOxALTO:
   1936x1216   máxima del sensor (valor por defecto, sin --resolution)
   1920x1080   1080p/1K estándar
@@ -206,6 +210,21 @@ def main() -> int:
     parser.add_argument("--cc320-ip", default=os.environ.get("PREMOV_CC320_IP"),
                          help="IP del controlador CC320 (o variable de entorno "
                               "PREMOV_CC320_IP; ver .env.example)")
+    parser.add_argument("-p", "--pause", action="store_true",
+                         help="espera a pulsar ENTER antes de abrir el gate del "
+                              "CC320 (las cámaras ya están armadas en ese punto, "
+                              "la espera no cuesta fotogramas: el CC320 todavía "
+                              "no está disparando pulsos)")
+    parser.add_argument("-s", "--delay", type=float, default=0.0,
+                         help="segundos de cuenta atrás después de pulsar ENTER "
+                              "(o justo tras armar las cámaras si no se usa "
+                              "-p/--pause) antes de abrir el gate — para dar "
+                              "tiempo a colocarse delante de las cámaras si se "
+                              "está solo (default 0)")
+    parser.add_argument("-b", "--beep", action="store_true",
+                         help="emite un pitido (carácter BEL del terminal) justo "
+                              "antes de abrir el gate, tras la pausa/cuenta atrás "
+                              "si las hay")
     args = parser.parse_args()
 
     if not args.cc320_ip:
@@ -277,8 +296,11 @@ def main() -> int:
                               f"{w}x{h}, exposición {exposure_us:.0f}us)")
                         time.sleep(STAGGER_S)
 
+                    print(f"\nLas {len(opened)} cámaras armadas.")
+                    wait_before_recording(args.pause, args.delay, args.beep)
+
                     t_ready = time.perf_counter()
-                    print(f"\nLas {len(opened)} cámaras armadas. Abriendo el gate (RV3,1)...")
+                    print("Abriendo el gate (RV3,1)...")
                     print(" ", cc320("RV3,1", args.cc320_ip))
                     gate_opened = True
 

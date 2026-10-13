@@ -50,6 +50,33 @@ DEFAULT_STAGGER_S = 0.3  # separación entre start_streaming() de cada cámara.
 # incluso a resolución completa. Ver scripts/probe_staggered_start.py.
 
 
+def wait_before_recording(pause: bool, delay_s: float, beep: bool) -> None:
+    """Pausa opcional antes de que las cámaras empiecen a producir
+    fotogramas de verdad: espera a pulsar ENTER (`pause`), luego cuenta
+    atrás `delay_s` segundos (para dar tiempo a colocarse delante de las
+    cámaras si se está solo), y opcionalmente emite un beep justo al
+    empezar. Debe llamarse cuando las cámaras ya están configuradas pero
+    aún no están grabando (antes de start_streaming() / de abrir el gate
+    del CC320), para que la espera no reste duración de grabación."""
+    if pause:
+        input("Pulsa ENTER para empezar a grabar...")
+
+    if delay_s > 0:
+        whole = int(delay_s)
+        frac = delay_s - whole
+        for remaining in range(whole, 0, -1):
+            print(f"  empezando en {remaining}s...", end="\r", flush=True)
+            time.sleep(1)
+        if frac > 0:
+            time.sleep(frac)
+        print(" " * 30, end="\r", flush=True)
+
+    if beep:
+        # Carácter BEL: la mayoría de terminales lo reproducen como un
+        # pitido audible si tienen la campana activada.
+        print("\a", end="", flush=True)
+
+
 @dataclass
 class CamResult:
     cam_id: str
@@ -276,8 +303,11 @@ def run_all_staggered(cams: List[Camera], duration_s: float, exposure_us: Option
                        ram_safety_fraction: float = 0.6,
                        target_fps: Optional[float] = None,
                        guarantee_fps: bool = False,
-                       resolution: Optional["tuple[int, int]"] = None) -> List[CamResult]:
-    """Abre y configura las 4 cámaras, y arranca su streaming una a una con
+                       resolution: Optional["tuple[int, int]"] = None,
+                       pause: bool = False, delay_s: float = 0.0,
+                       beep: bool = False) -> List[CamResult]:
+    """Abre y configura las 4 cámaras, espera opcionalmente (pause/delay/beep
+    — ver wait_before_recording), y arranca su streaming una a una con
     `stagger_s` de separación (no todas a la vez). El envío de frames es
     asíncrono vía callback interno de VmbC, así que no hace falta un hilo por
     cámara: basta con esperar `duration_s` una vez arrancada la última.
@@ -295,8 +325,10 @@ def run_all_staggered(cams: List[Camera], duration_s: float, exposure_us: Option
     stopped_early_for_ram = False
 
     with ExitStack() as stack:
+        # Paso 1: abre y configura las 4 cámaras. Todavía no producen
+        # fotogramas (start_streaming no se ha llamado), así que la
+        # pausa/retardo de más abajo no resta duración de grabación.
         opened = []
-
         for cam, res in zip(cams, results):
             try:
                 stack.enter_context(cam)
@@ -305,17 +337,18 @@ def run_all_staggered(cams: List[Camera], duration_s: float, exposure_us: Option
                                                         guarantee_fps, resolution)
                 res.width = cam.Width.get()
                 res.height = cam.Height.get()
-
                 handler = RawCollector(res)
-                # Buffer generoso: a >100fps y 15s sobra margen para absorber jitter
-                cam.start_streaming(handler=handler, buffer_count=64)
-
-                opened.append(cam)
-                window_start_by_id[res.cam_id] = time.perf_counter()
+                opened.append((cam, res, handler))
             except Exception as e:
                 res.error = str(e)
-                continue
 
+        wait_before_recording(pause, delay_s, beep)
+
+        # Paso 2: arranca el streaming de cada cámara abierta, escalonado.
+        for cam, res, handler in opened:
+            # Buffer generoso: a >100fps y 15s sobra margen para absorber jitter
+            cam.start_streaming(handler=handler, buffer_count=64)
+            window_start_by_id[res.cam_id] = time.perf_counter()
             if stagger_s > 0:
                 time.sleep(stagger_s)
 
@@ -329,7 +362,7 @@ def run_all_staggered(cams: List[Camera], duration_s: float, exposure_us: Option
                 break
         window_end = time.perf_counter()
 
-        for cam in opened:
+        for cam, res, handler in opened:
             try:
                 cam.stop_streaming()
             except Exception:
@@ -446,6 +479,20 @@ def main() -> int:
                               "GainAuto compense el brillo que falte con ganancia "
                               "en vez de con más tiempo de exposición (imagen más "
                               "ruidosa en poca luz, pero fps real = fps pedido).")
+    parser.add_argument("-p", "--pause", action="store_true",
+                         help="espera a pulsar ENTER antes de empezar a grabar "
+                              "(las cámaras ya están configuradas en ese punto, "
+                              "la espera no resta duración de grabación)")
+    parser.add_argument("-s", "--delay", type=float, default=0.0,
+                         help="segundos de cuenta atrás después de pulsar ENTER "
+                              "(o justo al arrancar si no se usa -p/--pause) antes "
+                              "de empezar a grabar — para dar tiempo a colocarse "
+                              "delante de las cámaras si se está solo (default 0)")
+    parser.add_argument("--beep", action="store_true",
+                         help="emite un pitido (carácter BEL del terminal) justo "
+                              "al empezar a grabar, tras la pausa/cuenta atrás si "
+                              "las hay. Sin alias corto -b: en este script ya está "
+                              "usada por -b/--binning.")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
 
@@ -466,7 +513,8 @@ def main() -> int:
                                      args.binning, args.stagger,
                                      args.throughput, args.ram_fraction,
                                      args.target_fps, args.guarantee_fps,
-                                     args.resolution)
+                                     args.resolution,
+                                     args.pause, args.delay, args.beep)
         wall_duration = time.perf_counter() - t0
 
         print(f"Captura finalizada en {wall_duration:.2f}s de pared.\n")

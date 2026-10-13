@@ -158,12 +158,25 @@ python scripts/speed_test_capture.py --resolution 1920x1080
 # recorte que alcanza los 176fps reales de esta cámara (su techo a
 # resolución completa son 128.64fps)
 python scripts/speed_test_capture.py --resolution 1936x862
+
+# para grabarte solo: espera a ENTER, cuenta atrás 5s y pita al empezar
+python scripts/speed_test_capture.py -d 10 -p -s 5 --beep
 ```
 
 Por defecto (sin `--resolution`) usa la resolución máxima del sensor. Un
 valor menor recorta la imagen centrada (no reescala) — por eso recortes
 más pequeños permiten más fps, al leer menos píxeles del sensor por
 fotograma.
+
+**`-p`/`--pause`**, **`-s`/`--delay SEGUNDOS`** y **`--beep`** (sin alias
+corto en este script: `-b` ya es `--binning`) sirven para grabarte sin
+tener a nadie más pulsando el botón: `-p` espera a que pulses ENTER,
+`-s` hace una cuenta atrás después (o justo al arrancar si no usas `-p`)
+para dar tiempo a colocarte delante de las cámaras, y `--beep` emite un
+pitido (carácter BEL del terminal — depende de que la campana del
+terminal esté activada para oírse) justo al empezar a grabar de verdad.
+La espera ocurre con las cámaras ya configuradas pero sin producir
+fotogramas todavía, así que no resta duración de grabación.
 
 El techo real medido de esta cámara es 128.64fps, así que un `--target-fps`
 cercano a ese valor (como 125) está muy próximo al límite pero debería
@@ -227,6 +240,11 @@ scripts):
 
   # si el CC320 no está ya a 60fps, lo reprograma antes de capturar
   python scripts/hw_trigger_capture.py -d 5 --fps 60
+
+  # para grabarte solo: espera a ENTER, cuenta atrás 5s y pita antes de
+  # abrir la puerta del CC320 (las cámaras ya están armadas en ese punto,
+  # no cuesta fotogramas: el CC320 todavía no dispara pulsos)
+  python scripts/hw_trigger_capture.py -d 5 -p -s 5 -b
   ```
 
   El periodo del CC320 se fija en pasos de 0.1ms, así que el fps real tras
