@@ -312,11 +312,24 @@ def main() -> int:
                         if used >= ram_budget:
                             stopped_early = True
                             break
+                    # Instante real de fin de ventana, capturado ANTES de
+                    # cerrar la puerta: el comando RV3,0 puede tardar bastante
+                    # en completarse (visto en pruebas: hasta >1s en vez de
+                    # los ~0.3s esperados, probablemente por la cantidad de
+                    # conexiones TCP cortas que ha recibido el CC320 en la
+                    # sesión), y durante esa espera el CC320 sigue disparando
+                    # pulsos. Si se usara el instante de DESPUÉS del cierre
+                    # como límite, esos pulsos de más se colarían en el
+                    # vídeo, y además de forma asimétrica entre cámaras según
+                    # a cuál le toque su stop_streaming() antes en el bucle
+                    # de abajo (eso es justo lo que causaba que la última
+                    # cámara en pararse acumulase siempre más fotogramas).
+                    t_capture_end = time.perf_counter()
 
                     print("Cerrando el gate (RV3,0)...")
                     print(" ", cc320("RV3,0", args.cc320_ip))
                     gate_opened = False
-                    elapsed = time.perf_counter() - t_ready
+                    elapsed = t_capture_end - t_ready
                 finally:
                     # Se ejecuta pase lo que pase (también si algo de arriba
                     # lanza una excepción) para no dejar el CC320 disparando
@@ -350,8 +363,12 @@ def main() -> int:
         print(f"\n!! Corte de seguridad por RAM tras {elapsed:.2f}s "
               f"(pedidos {args.duration:.1f}s)")
 
+    # Recorta las 4 cámaras a la MISMA ventana [t_ready, t_capture_end]: sin
+    # el límite superior, los pulsos que llegan mientras se cierra la puerta
+    # (ver comentario más arriba) se contaban de forma asimétrica según el
+    # orden en que a cada cámara le toca su stop_streaming().
     for res in results.values():
-        res.frames = [(t, f) for t, f in res.frames if t >= t_ready]
+        res.frames = [(t, f) for t, f in res.frames if t_ready <= t <= t_capture_end]
 
     print(f"\n--- Resultado tras {elapsed:.2f}s a {configured_fps:.2f}fps "
           f"programados (esperado ~{elapsed * configured_fps:.0f} frames/cámara) ---")

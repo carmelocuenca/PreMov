@@ -10,6 +10,7 @@ Uso:
     python speed_test_capture.py [-d SEGUNDOS] [-o DIR] [-e MICROSEG]
 """
 import argparse
+import subprocess
 import sys
 import time
 from contextlib import ExitStack
@@ -50,6 +51,23 @@ DEFAULT_STAGGER_S = 0.3  # separación entre start_streaming() de cada cámara.
 # incluso a resolución completa. Ver scripts/probe_staggered_start.py.
 
 
+def play_beep() -> None:
+    """Emite un pitido audible. El carácter BEL del terminal (`\\a`) solo
+    suena si la campana del terminal está activada — en muchos terminales
+    (incluido VS Code) viene silenciada por defecto, así que se prueba
+    primero a reproducir el sonido de sistema por PipeWire (`pw-play`,
+    nativo en Ubuntu 26.04), y solo si eso falla se cae al BEL."""
+    sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
+    try:
+        result = subprocess.run(["pw-play", sound_file], stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, timeout=3.0)
+        if result.returncode == 0:
+            return
+    except Exception:
+        pass
+    print("\a", end="", flush=True)
+
+
 def wait_before_recording(pause: bool, delay_s: float, beep: bool) -> None:
     """Pausa opcional antes de que las cámaras empiecen a producir
     fotogramas de verdad: espera a pulsar ENTER (`pause`), luego cuenta
@@ -72,9 +90,7 @@ def wait_before_recording(pause: bool, delay_s: float, beep: bool) -> None:
         print(" " * 30, end="\r", flush=True)
 
     if beep:
-        # Carácter BEL: la mayoría de terminales lo reproducen como un
-        # pitido audible si tienen la campana activada.
-        print("\a", end="", flush=True)
+        play_beep()
 
 
 @dataclass
